@@ -1,65 +1,228 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import MenuItemModal from '@/components/MenuItemModal'
 
-// Mock data for categories and menu items
-const mockCategories = [
-  { id: 1, name: 'Appetizers' },
-  { id: 2, name: 'Main Courses' },
-  { id: 3, name: 'Beverages' },
-  { id: 4, name: 'Desserts' },
-]
+interface Category {
+  id: number
+  name: string
+}
 
-const mockMenuItems = [
-  {
-    id: 1,
-    name: 'Spring Rolls',
-    description: 'Fresh vegetables wrapped in rice paper',
-    price: 8.99,
-    image_url: '/placeholder-food.jpg',
-    is_available: true,
-    category_id: 1,
-  },
-  {
-    id: 2,
-    name: 'Pad Thai',
-    description: 'Traditional Thai stir-fried noodles',
-    price: 12.99,
-    image_url: '/placeholder-food.jpg',
-    is_available: true,
-    category_id: 2,
-  },
-  {
-    id: 3,
-    name: 'Thai Iced Tea',
-    description: 'Sweet and creamy traditional Thai tea',
-    price: 4.99,
-    image_url: '/placeholder-food.jpg',
-    is_available: false,
-    category_id: 3,
-  },
-]
+interface MenuItem {
+  id: number
+  name: string
+  description: string
+  price: number
+  image_url?: string
+  is_available: boolean
+  category_id: number
+  category_name?: string
+}
 
 export default function MenuManagement() {
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null)
-  const [menuItems, setMenuItems] = useState(mockMenuItems)
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Load data on component mount
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      // Load categories and menu items in parallel
+      const [categoriesRes, menuItemsRes] = await Promise.all([
+        fetch('/api/categories'),
+        fetch('/api/menu-items')
+      ])
+
+      if (!categoriesRes.ok || !menuItemsRes.ok) {
+        // If database is not set up, use fallback mock data
+        console.warn('API failed, using mock data')
+        setCategories([
+          { id: 1, name: 'Appetizers' },
+          { id: 2, name: 'Main Courses' },
+          { id: 3, name: 'Beverages' },
+          { id: 4, name: 'Desserts' },
+        ])
+        setMenuItems([
+          {
+            id: 1,
+            name: 'Spring Rolls',
+            description: 'Fresh vegetables wrapped in rice paper',
+            price: 8.99,
+            image_url: '/placeholder-food.jpg',
+            is_available: true,
+            category_id: 1,
+            category_name: 'Appetizers'
+          },
+          {
+            id: 2,
+            name: 'Pad Thai',
+            description: 'Traditional Thai stir-fried noodles',
+            price: 12.99,
+            image_url: '/placeholder-food.jpg',
+            is_available: true,
+            category_id: 2,
+            category_name: 'Main Courses'
+          },
+          {
+            id: 3,
+            name: 'Thai Iced Tea',
+            description: 'Sweet and creamy traditional Thai tea',
+            price: 4.99,
+            image_url: '/placeholder-food.jpg',
+            is_available: false,
+            category_id: 3,
+            category_name: 'Beverages'
+          },
+        ])
+        return
+      }
+
+      const categoriesData = await categoriesRes.json()
+      const menuItemsData = await menuItemsRes.json()
+
+      setCategories(categoriesData.categories || [])
+      setMenuItems(menuItemsData.menuItems || [])
+    } catch (err) {
+      setError('Failed to load menu data. Please try again.')
+      console.error('Error loading data:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const filteredItems = selectedCategory
     ? menuItems.filter(item => item.category_id === selectedCategory)
     : menuItems
 
-  const toggleAvailability = (itemId: number) => {
-    setMenuItems(items =>
-      items.map(item =>
-        item.id === itemId
-          ? { ...item, is_available: !item.is_available }
-          : item
+  const toggleAvailability = async (itemId: number) => {
+    const item = menuItems.find(item => item.id === itemId)
+    if (!item) return
+
+    try {
+      const response = await fetch(`/api/menu-items/${itemId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...item,
+          is_available: !item.is_available
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update availability')
+      }
+
+      // Update local state
+      setMenuItems(items =>
+        items.map(item =>
+          item.id === itemId
+            ? { ...item, is_available: !item.is_available }
+            : item
+        )
       )
-    )
+    } catch (err) {
+      console.error('Error updating availability:', err)
+      alert('Failed to update item availability. Please try again.')
+    }
+  }
+
+  const handleOpenModal = (item?: MenuItem) => {
+    setEditingItem(item || null)
+    setIsModalOpen(true)
+  }
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setEditingItem(null)
+  }
+
+  const handleSubmitForm = async (formData: Omit<MenuItem, 'id'> & { id?: number }) => {
+    try {
+      const isEditing = !!editingItem
+      const url = isEditing ? `/api/menu-items/${editingItem.id}` : '/api/menu-items'
+      const method = isEditing ? 'PUT' : 'POST'
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save menu item')
+      }
+
+      const result = await response.json()
+      
+      if (isEditing) {
+        // Update existing item
+        setMenuItems(items =>
+          items.map(item =>
+            item.id === editingItem.id
+              ? { ...result.menuItem, category_name: getCategoryName(result.menuItem.category_id) }
+              : item
+          )
+        )
+      } else {
+        // Add new item
+        setMenuItems(items => [
+          ...items,
+          { ...result.menuItem, category_name: getCategoryName(result.menuItem.category_id) }
+        ])
+      }
+    } catch (err) {
+      console.error('Error saving menu item:', err)
+      throw err // Re-throw to let modal handle the error
+    }
   }
 
   const getCategoryName = (categoryId: number) => {
-    return mockCategories.find(cat => cat.id === categoryId)?.name || 'Unknown'
+    return categories.find(cat => cat.id === categoryId)?.name || 'Unknown'
+  }
+
+  if (loading) {
+    return (
+      <div className="px-4 py-6 sm:px-0">
+        <div className="border-4 border-dashed border-gray-200 rounded-lg p-6">
+          <div className="text-center py-12">
+            <p className="text-gray-500">Loading menu data...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="px-4 py-6 sm:px-0">
+        <div className="border-4 border-dashed border-gray-200 rounded-lg p-6">
+          <div className="text-center py-12">
+            <p className="text-red-500">{error}</p>
+            <button
+              onClick={loadData}
+              className="mt-4 bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -83,7 +246,7 @@ export default function MenuManagement() {
             onChange={(e) => setSelectedCategory(e.target.value ? Number(e.target.value) : null)}
           >
             <option value="">All Categories</option>
-            {mockCategories.map(category => (
+            {categories.map(category => (
               <option key={category.id} value={category.id}>
                 {category.name}
               </option>
@@ -93,7 +256,10 @@ export default function MenuManagement() {
 
         {/* Add New Item Button */}
         <div className="mb-6">
-          <button className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+          <button 
+            onClick={() => handleOpenModal()}
+            className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
             Add New Menu Item
           </button>
         </div>
@@ -146,7 +312,10 @@ export default function MenuManagement() {
                       {item.is_available ? 'Mark Sold Out' : 'Mark Available'}
                     </button>
                     
-                    <button className="bg-gray-100 text-gray-700 px-3 py-1 rounded text-xs font-medium hover:bg-gray-200">
+                    <button 
+                      onClick={() => handleOpenModal(item)}
+                      className="bg-gray-100 text-gray-700 px-3 py-1 rounded text-xs font-medium hover:bg-gray-200"
+                    >
                       Edit
                     </button>
                   </div>
@@ -162,6 +331,15 @@ export default function MenuManagement() {
           </div>
         )}
       </div>
+
+      {/* Modal */}
+      <MenuItemModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        onSubmit={handleSubmitForm}
+        categories={categories}
+        editItem={editingItem}
+      />
     </div>
   )
 }
