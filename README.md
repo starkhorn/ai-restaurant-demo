@@ -41,8 +41,13 @@ npm install
 3. Set up environment variables:
 ```bash
 cp .env.local.example .env.local
-# Edit .env.local with your values
+# Edit .env.local with your database connection details
 ```
+
+**Required Environment Variables:**
+- `POSTGRES_URL` - Main database connection string
+- `POSTGRES_URL_NON_POOLING` - Non-pooling connection for migrations
+- `NEXTAUTH_SECRET` - Secret key for NextAuth.js (auto-generated in development)
 
 4. Run the development server:
 ```bash
@@ -53,15 +58,41 @@ npm run dev
 
 ### Database Setup
 
-For local development, you can use the mock data. For production:
+The application uses Vercel Postgres for data storage. To set up the database:
 
-1. Set up Vercel Postgres database
-2. Add database connection URLs to your environment variables
+**For Local Development:**
+1. Create a Vercel Postgres database in your Vercel dashboard
+2. Copy the connection strings to your `.env.local` file:
+   - `POSTGRES_URL` - for general database operations
+   - `POSTGRES_URL_NON_POOLING` - for schema migrations and setup
 3. Call the setup API to create tables and seed data:
 
 ```bash
 curl -X POST http://localhost:3000/api/setup
 ```
+
+**For Production (Vercel Deployment):**
+1. Create a Vercel Postgres database
+2. Environment variables are automatically configured by Vercel
+3. The database setup API can be called once after deployment
+
+## Environment Variables
+
+The following environment variables are required for the application:
+
+### Required Variables
+- **`POSTGRES_URL`** - Main Vercel Postgres connection string
+- **`POSTGRES_URL_NON_POOLING`** - Non-pooling connection for schema operations
+
+### Optional Variables
+- **`NEXTAUTH_SECRET`** - Secret for NextAuth.js (defaults to dev key in development)
+- **`NEXTAUTH_URL`** - Application URL (defaults to http://localhost:3000 in development)
+
+### Getting Connection Strings
+1. Create a Vercel Postgres database in your [Vercel Dashboard](https://vercel.com/dashboard)
+2. Navigate to your database settings
+3. Copy the `.env.local` tab contents to your local `.env.local` file
+4. The connection strings include authentication and SSL configuration
 
 ## Authentication
 
